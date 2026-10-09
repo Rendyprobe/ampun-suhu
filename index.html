@@ -1,0 +1,324 @@
+
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IoT Suhu & Kelembapan</title>
+
+  <!-- MQTT over WebSocket dan grafik -->
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #0b1120;
+      color: #e5eefc;
+    }
+
+    header {
+      padding: 26px 20px;
+      border-bottom: 1px solid #263449;
+      background: #111b2e;
+    }
+
+    header h1 {
+      margin: 0 0 8px;
+      font-size: 25px;
+    }
+
+    header p {
+      margin: 0;
+      color: #9aacc7;
+    }
+
+    main {
+      max-width: 1100px;
+      margin: auto;
+      padding: 24px 16px;
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      padding: 10px 14px;
+      background: #17243a;
+      border-radius: 10px;
+      margin-bottom: 20px;
+      color: #fbbf24;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 18px;
+    }
+
+    .card, .panel {
+      background: #111b2e;
+      border: 1px solid #263449;
+      border-radius: 16px;
+      padding: 22px;
+    }
+
+    .label {
+      color: #9aacc7;
+      font-size: 14px;
+    }
+
+    .value {
+      font-size: clamp(32px, 6vw, 46px);
+      font-weight: bold;
+      margin: 16px 0 8px;
+    }
+
+    .temperature { color: #fb923c; }
+    .humidity { color: #38bdf8; }
+
+    .unit {
+      font-size: 18px;
+      color: #9aacc7;
+    }
+
+    .panel {
+      margin-top: 20px;
+    }
+
+    .panel h2 {
+      margin-top: 0;
+      font-size: 18px;
+    }
+
+    .chart-wrap {
+      position: relative;
+      height: 300px;
+    }
+
+    footer {
+      color: #8193ae;
+      font-size: 13px;
+      text-align: center;
+      padding: 24px 12px;
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <h1>IoT Environmental Monitor</h1>
+    <p>Monitoring suhu dan kelembapan berbasis ESP32 + DHT22</p>
+  </header>
+
+  <main>
+    <div class="status" id="status">
+      <span class="dot"></span>
+      <span id="statusText">Menghubungkan ke MQTT...</span>
+    </div>
+
+    <section class="cards">
+      <article class="card">
+        <div class="label">Suhu saat ini</div>
+        <div class="value temperature">
+          <span id="temperature">--.-</span>
+          <span class="unit">°C</span>
+        </div>
+        <div class="label">Sensor DHT22</div>
+      </article>
+
+      <article class="card">
+        <div class="label">Kelembapan saat ini</div>
+        <div class="value humidity">
+          <span id="humidity">--.-</span>
+          <span class="unit">%RH</span>
+        </div>
+        <div class="label">Relative humidity</div>
+      </article>
+    </section>
+
+    <section class="panel">
+      <h2>Grafik suhu</h2>
+      <div class="chart-wrap">
+        <canvas id="temperatureChart"></canvas>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Grafik kelembapan</h2>
+      <div class="chart-wrap">
+        <canvas id="humidityChart"></canvas>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Status perangkat</h2>
+      <p>Topik MQTT: <code id="topic"></code></p>
+      <p>Pembaruan terakhir: <strong id="lastUpdate">Belum ada data</strong></p>
+      <p>Jumlah pesan diterima: <strong id="messageCount">0</strong></p>
+    </section>
+  </main>
+
+  <footer>
+    ESP32 + DHT22 · MQTT · Dashboard buatan sendiri
+  </footer>
+
+  <script>
+    // Harus sama persis dengan MQTT_TOPIC pada sketch.ino
+    const TOPIC = "iot-suhu/rendy-esp32-7f3a/dht22";
+
+    // Broker publik Mosquitto melalui WebSocket terenkripsi.
+    const BROKER = "wss://test.mosquitto.org:8081/mqtt";
+
+    document.getElementById("topic").textContent = TOPIC;
+
+    function createChart(canvasId, label, color) {
+      return new Chart(document.getElementById(canvasId), {
+        type: "line",
+        data: {
+          labels: [],
+          datasets: [{
+            label: label,
+            data: [],
+            borderColor: color,
+            backgroundColor: color + "22",
+            fill: true,
+            tension: 0.3,
+            pointRadius: 2
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: false,
+          scales: {
+            x: {
+              ticks: { color: "#9aacc7", maxTicksLimit: 7 },
+              grid: { color: "#263449" }
+            },
+            y: {
+              ticks: { color: "#9aacc7" },
+              grid: { color: "#263449" }
+            }
+          },
+          plugins: {
+            legend: {
+              labels: { color: "#e5eefc" }
+            }
+          }
+        }
+      });
+    }
+
+    const tempChart = createChart(
+      "temperatureChart", "Suhu (°C)", "#fb923c"
+    );
+
+    const humChart = createChart(
+      "humidityChart", "Kelembapan (%RH)", "#38bdf8"
+    );
+
+    let messageCount = 0;
+    const MAX_POINTS = 30;
+
+    function setStatus(text, color) {
+      document.getElementById("statusText").textContent = text;
+      document.getElementById("status").style.color = color;
+    }
+
+    function addPoint(chart, label, value) {
+      chart.data.labels.push(label);
+      chart.data.datasets[0].data.push(value);
+
+      if (chart.data.labels.length > MAX_POINTS) {
+        chart.data.labels.shift();
+        chart.data.datasets[0].data.shift();
+      }
+
+      chart.update("none");
+    }
+
+    const client = mqtt.connect(BROKER, {
+      clientId: "dashboard_" +
+        Math.random().toString(16).slice(2, 10),
+      clean: true,
+      connectTimeout: 15000,
+      reconnectPeriod: 3000
+    });
+
+    client.on("connect", function () {
+      setStatus("MQTT terhubung", "#4ade80");
+
+      client.subscribe(TOPIC, function (err) {
+        if (err) {
+          setStatus("Gagal subscribe topik", "#f87171");
+        } else {
+          console.log("Subscribe berhasil:", TOPIC);
+        }
+      });
+    });
+
+    client.on("reconnect", function () {
+      setStatus("Mencoba menyambung ulang...", "#fbbf24");
+    });
+
+    client.on("offline", function () {
+      setStatus("Dashboard offline", "#f87171");
+    });
+
+    client.on("error", function (err) {
+      console.error("MQTT error:", err);
+      setStatus("Koneksi MQTT bermasalah", "#f87171");
+    });
+
+    client.on("message", function (topic, message) {
+      if (topic !== TOPIC) return;
+
+      try {
+        const data = JSON.parse(message.toString());
+
+        const temperature = Number(data.temperature);
+        const humidity = Number(data.humidity);
+
+        if (!Number.isFinite(temperature) ||
+            !Number.isFinite(humidity)) {
+          return;
+        }
+
+        document.getElementById("temperature").textContent =
+          temperature.toFixed(1);
+
+        document.getElementById("humidity").textContent =
+          humidity.toFixed(1);
+
+        const now = new Date();
+        const timeLabel = now.toLocaleTimeString("id-ID");
+
+        addPoint(tempChart, timeLabel, temperature);
+        addPoint(humChart, timeLabel, humidity);
+
+        document.getElementById("lastUpdate").textContent =
+          now.toLocaleString("id-ID");
+
+        messageCount++;
+        document.getElementById("messageCount").textContent =
+          messageCount;
+
+        setStatus("Data sensor diterima", "#4ade80");
+      } catch (err) {
+        console.error("Payload MQTT tidak valid:", err);
+      }
+    });
+  </script>
+</body>
+</html>

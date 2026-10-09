@@ -126,7 +126,7 @@
   <main class="container">
     <section class="header">
       <h1>🌡️ Dashboard Suhu</h1>
-      <p class="subtitle">ESP32 + DHT22 → MQTT → Web Dashboard</p>
+      <p class="subtitle">ESP32 + DHT22 → MQTT (EMQX) → Web Dashboard</p>
 
       <div id="status" class="status">
         <span class="dot"></span>
@@ -157,7 +157,7 @@
       <canvas id="chart" width="860" height="230"></canvas>
 
       <div class="meta">
-        <div><b>MQTT Broker:</b> test.mosquitto.org:8081 (WebSocket Secure)</div>
+        <div><b>MQTT Broker:</b> broker.emqx.io:8084 (WebSocket Secure)</div>
         <div><b>Topic:</b> <span id="topic"></span></div>
         <div><b>Update terakhir:</b> <span id="updated">Belum ada data</span></div>
       </div>
@@ -165,11 +165,11 @@
   </main>
 
   <script>
-    // DISAMAKAN: Mengikuti variabel MQTT_TOPIC dari ESP32 Anda
+    // 1. Topik disamakan dengan MQTT_TOPIC di ESP32
     const TOPIC = "iot-suhu/rendy-esp32-7f3a/dht22";
 
-    // DISAMAKAN: Mengikuti server Mosquitto via protokol WebSocket Secure (WSS) port 8081
-    const BROKER = "wss://://hivemq.com";
+    // 2. DIUBAH KE EMQX: Menggunakan WSS port 8084 milik EMQX
+    const BROKER = "wss://broker.emqx.io:8084/mqtt";
 
     const MAX_POINTS = 30;
     const values = [];
@@ -240,8 +240,7 @@
 
       if (values.length === 1) {
         const x = width / 2;
-        const y = height - pad -
-          ((values[0] - minY) / (maxY - minY)) * chartH;
+        const y = height - pad - ((values[0] - minY) / (maxY - minY)) * chartH;
 
         ctx.fillStyle = "#38bdf8";
         ctx.beginPath();
@@ -256,8 +255,7 @@
 
       values.forEach((value, index) => {
         const x = pad + (chartW * index / (values.length - 1));
-        const y = height - pad -
-          ((value - minY) / (maxY - minY)) * chartH;
+        const y = height - pad - ((value - minY) / (maxY - minY)) * chartH;
 
         if (index === 0) {
           ctx.moveTo(x, y);
@@ -271,8 +269,7 @@
       // Points
       values.forEach((value, index) => {
         const x = pad + (chartW * index / (values.length - 1));
-        const y = height - pad -
-          ((value - minY) / (maxY - minY)) * chartH;
+        const y = height - pad - ((value - minY) / (maxY - minY)) * chartH;
 
         ctx.fillStyle = "#38bdf8";
         ctx.beginPath();
@@ -285,7 +282,7 @@
       try {
         const data = JSON.parse(payload.toString());
 
-        // DISAMAKAN: Mengambil objek 'temperature' dan 'humidity' yang dikirim dari skrip ESP32
+        // Membaca 'temperature' dan 'humidity' dari payload JSON ESP32
         const suhu = Number(data.temperature);
         const kelembapan = Number(data.humidity);
 
@@ -294,8 +291,7 @@
         }
 
         tempEl.textContent = suhu.toFixed(1);
-        humidityEl.textContent =
-          Number.isFinite(kelembapan) ? kelembapan.toFixed(1) : "--.-";
+        humidityEl.textContent = Number.isFinite(kelembapan) ? kelembapan.toFixed(1) : "--.-";
 
         values.push(suhu);
         times.push(new Date());

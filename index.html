@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Dashboard Suhu ESP32 + DHT22</title>
 
-  <!-- MQTT over WebSocket -->
-  <script src="https://unpkg.com"></script>
+  <!-- MQTT over WebSocket - MENGGUNAKAN JSDELIVR (ANTI-ERROR) -->
+  <script src="https://jsdelivr.net"></script>
 
   <style>
     * { box-sizing: border-box; }
@@ -168,7 +168,7 @@
     // 1. Topik disamakan dengan MQTT_TOPIC di ESP32
     const TOPIC = "iot-suhu/rendy-esp32-7f3a/dht22";
 
-    // 2. DIUBAH KE EMQX: Menggunakan WSS port 8084 milik EMQX
+    // 2. Broker menggunakan WSS port 8084 milik EMQX
     const BROKER = "wss://broker.emqx.io:8084/mqtt";
 
     const MAX_POINTS = 30;
